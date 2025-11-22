@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: recipe
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/janusdb
+    username: black
+    password: black
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        default_batch_fetch_size: 50
+        format_sql: true
+        highlight_sql: true
+        use_sql_comments: true

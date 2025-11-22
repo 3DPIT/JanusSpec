@@ -29,6 +29,8 @@ public class SecurityConfig {
                                 "/api/v1/**"
                         ).permitAll()
                         .anyRequest().permitAll()
+                )       .headers(headers -> headers
+                        .frameOptions(frameOptions -> frameOptions.disable())
                 );
 
         return http.build();

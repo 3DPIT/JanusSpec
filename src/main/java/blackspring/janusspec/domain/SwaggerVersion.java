@@ -9,7 +9,10 @@ import lombok.*;
 import java.nio.charset.StandardCharsets;
 
 @Entity
-@Table(name = "swagger_version")
+@Table(name = "swagger_version", 
+       indexes = {
+           @Index(name = "idx_service_url", columnList = "service_name, swagger_url")
+       })
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor

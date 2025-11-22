@@ -6,7 +6,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface SwaggerVersionRepository extends JpaRepository<SwaggerVersion,Long> {
-    Optional<SwaggerVersion> findBySwaggerUrl(String url);
+    Optional<SwaggerVersion> findTopBySwaggerUrlOrderByIdDesc(String url);
+    Optional<SwaggerVersion> findTopByServiceNameAndSwaggerUrlOrderByIdDesc(String serviceName, String url);
     Optional<SwaggerVersion> findTopByOrderByIdDesc();
     Optional<SwaggerVersion> findTopByServiceNameOrderByIdDesc(String serviceName);
 }

@@ -2,6 +2,8 @@ package blackspring.janusspec.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "api_diff_endpoint")
@@ -28,9 +30,11 @@ public class ApiDiffEndpoint {
     @Column(name = "change_type", length = 50)
     private String changeType;   // ADDED, REMOVED, UPDATED
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String beforeJson;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private String afterJson;
 }

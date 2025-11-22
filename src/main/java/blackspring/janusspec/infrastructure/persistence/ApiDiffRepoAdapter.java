@@ -94,15 +94,15 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
                 ApiEndpoint oldEndpoint = entry.getValue();
                 ApiEndpoint newEndpoint = newEndpointMap.get(entry.getKey());
                 
-                List<String> changedFields = getChangedFields(oldEndpoint, newEndpoint);
-                if (!changedFields.isEmpty()) {
+                Map<String, Map<String, String>> fieldChanges = getDetailedFieldChanges(oldEndpoint, newEndpoint);
+                if (!fieldChanges.isEmpty()) {
                     ApiDiffEndpoint diffEndpoint = ApiDiffEndpoint.builder()
                             .diffLog(savedDiffLog)
                             .path(newEndpoint.getPath())
                             .httpMethod(newEndpoint.getHttpMethod())
                             .changeType("UPDATED")
-                            .beforeJson(endpointToJson(oldEndpoint, changedFields))
-                            .afterJson(endpointToJson(newEndpoint, changedFields))
+                            .beforeJson(createDetailedBeforeJson(oldEndpoint, fieldChanges))
+                            .afterJson(createDetailedAfterJson(newEndpoint, fieldChanges))
                             .build();
                     apiDiffEndpointRepository.save(diffEndpoint);
                     updatedCount++;
@@ -110,38 +110,131 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
             }
         }
 
-        System.out.println("[DIFF SUMMARY] Added: " + addedCount + ", Removed: " + removedCount + ", Updated: " + updatedCount);
+        // 상세 로그 출력
+        System.out.println("\n========================================");
+        System.out.println("📊 API 변경 감지 완료!");
+        System.out.println("========================================");
+        System.out.println("🆕 추가된 API: " + addedCount + "개");
+        System.out.println("🗑️  삭제된 API: " + removedCount + "개");
+        System.out.println("✏️  수정된 API: " + updatedCount + "개");
+        System.out.println("📈 총 변경 사항: " + (addedCount + removedCount + updatedCount) + "개");
+        System.out.println("========================================\n");
 
         return savedDiffLog;
     }
 
     /**
-     * 두 엔드포인트를 비교하여 변경된 필드 목록 반환
+     * 두 엔드포인트를 비교하여 변경된 필드의 상세 정보 반환
+     * Map<필드명, Map<"before"/"after", 값>>
      */
-    private List<String> getChangedFields(ApiEndpoint oldEndpoint, ApiEndpoint newEndpoint) {
-        List<String> changedFields = new ArrayList<>();
+    private Map<String, Map<String, String>> getDetailedFieldChanges(ApiEndpoint oldEndpoint, ApiEndpoint newEndpoint) {
+        Map<String, Map<String, String>> changes = new LinkedHashMap<>();
         
         if (!Objects.equals(oldEndpoint.getSummary(), newEndpoint.getSummary())) {
-            changedFields.add("summary");
-        }
-        if (!Objects.equals(oldEndpoint.getOperationId(), newEndpoint.getOperationId())) {
-            changedFields.add("operationId");
-        }
-        if (oldEndpoint.isDeprecated() != newEndpoint.isDeprecated()) {
-            changedFields.add("deprecated");
-        }
-        if (!Objects.equals(oldEndpoint.getRequestSchemaName(), newEndpoint.getRequestSchemaName())) {
-            changedFields.add("requestSchemaName");
-        }
-        if (!Objects.equals(oldEndpoint.getResponseSchemaName(), newEndpoint.getResponseSchemaName())) {
-            changedFields.add("responseSchemaName");
+            Map<String, String> change = new LinkedHashMap<>();
+            change.put("before", oldEndpoint.getSummary() != null ? oldEndpoint.getSummary() : "");
+            change.put("after", newEndpoint.getSummary() != null ? newEndpoint.getSummary() : "");
+            changes.put("summary", change);
         }
         
-        return changedFields;
+        if (!Objects.equals(oldEndpoint.getOperationId(), newEndpoint.getOperationId())) {
+            Map<String, String> change = new LinkedHashMap<>();
+            change.put("before", oldEndpoint.getOperationId() != null ? oldEndpoint.getOperationId() : "");
+            change.put("after", newEndpoint.getOperationId() != null ? newEndpoint.getOperationId() : "");
+            changes.put("operationId", change);
+        }
+        
+        if (oldEndpoint.isDeprecated() != newEndpoint.isDeprecated()) {
+            Map<String, String> change = new LinkedHashMap<>();
+            change.put("before", String.valueOf(oldEndpoint.isDeprecated()));
+            change.put("after", String.valueOf(newEndpoint.isDeprecated()));
+            changes.put("deprecated", change);
+        }
+        
+        if (!Objects.equals(oldEndpoint.getRequestSchemaName(), newEndpoint.getRequestSchemaName())) {
+            Map<String, String> change = new LinkedHashMap<>();
+            change.put("before", oldEndpoint.getRequestSchemaName() != null ? oldEndpoint.getRequestSchemaName() : "");
+            change.put("after", newEndpoint.getRequestSchemaName() != null ? newEndpoint.getRequestSchemaName() : "");
+            changes.put("requestSchemaName", change);
+        }
+        
+        if (!Objects.equals(oldEndpoint.getResponseSchemaName(), newEndpoint.getResponseSchemaName())) {
+            Map<String, String> change = new LinkedHashMap<>();
+            change.put("before", oldEndpoint.getResponseSchemaName() != null ? oldEndpoint.getResponseSchemaName() : "");
+            change.put("after", newEndpoint.getResponseSchemaName() != null ? newEndpoint.getResponseSchemaName() : "");
+            changes.put("responseSchemaName", change);
+        }
+        
+        return changes;
+    }
+    
+    /**
+     * 변경 전 상세 JSON 생성 (변경된 필드만 강조)
+     */
+    private String createDetailedBeforeJson(ApiEndpoint endpoint, Map<String, Map<String, String>> fieldChanges) {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("path", endpoint.getPath());
+            data.put("httpMethod", endpoint.getHttpMethod());
+            data.put("summary", endpoint.getSummary());
+            data.put("operationId", endpoint.getOperationId());
+            data.put("deprecated", endpoint.isDeprecated());
+            data.put("requestSchemaName", endpoint.getRequestSchemaName());
+            data.put("responseSchemaName", endpoint.getResponseSchemaName());
+            
+            // 변경된 필드 상세 정보
+            if (!fieldChanges.isEmpty()) {
+                Map<String, String> changedFieldsDetail = new LinkedHashMap<>();
+                for (Map.Entry<String, Map<String, String>> entry : fieldChanges.entrySet()) {
+                    changedFieldsDetail.put(entry.getKey(), entry.getValue().get("before"));
+                }
+                data.put("changedFields", changedFieldsDetail);
+            }
+            
+            return objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+    
+    /**
+     * 변경 후 상세 JSON 생성 (변경된 필드만 강조)
+     */
+    private String createDetailedAfterJson(ApiEndpoint endpoint, Map<String, Map<String, String>> fieldChanges) {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("path", endpoint.getPath());
+            data.put("httpMethod", endpoint.getHttpMethod());
+            data.put("summary", endpoint.getSummary());
+            data.put("operationId", endpoint.getOperationId());
+            data.put("deprecated", endpoint.isDeprecated());
+            data.put("requestSchemaName", endpoint.getRequestSchemaName());
+            data.put("responseSchemaName", endpoint.getResponseSchemaName());
+            
+            // 변경된 필드 상세 정보
+            if (!fieldChanges.isEmpty()) {
+                Map<String, String> changedFieldsDetail = new LinkedHashMap<>();
+                for (Map.Entry<String, Map<String, String>> entry : fieldChanges.entrySet()) {
+                    changedFieldsDetail.put(entry.getKey(), entry.getValue().get("after"));
+                }
+                data.put("changedFields", changedFieldsDetail);
+            }
+            
+            return objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+    
+    /**
+     * 두 엔드포인트를 비교하여 변경된 필드 목록 반환 (통계용)
+     */
+    private List<String> getChangedFields(ApiEndpoint oldEndpoint, ApiEndpoint newEndpoint) {
+        return new ArrayList<>(getDetailedFieldChanges(oldEndpoint, newEndpoint).keySet());
     }
 
     /**
-     * 엔드포인트를 JSON으로 변환 (변경된 필드 정보 포함)
+     * 엔드포인트를 간단한 JSON으로 변환 (ADDED/REMOVED용)
      */
     private String endpointToJson(ApiEndpoint endpoint, List<String> changedFields) {
         try {
@@ -153,11 +246,6 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
             endpointData.put("deprecated", endpoint.isDeprecated());
             endpointData.put("requestSchemaName", endpoint.getRequestSchemaName());
             endpointData.put("responseSchemaName", endpoint.getResponseSchemaName());
-            
-            // 변경된 필드 목록 추가 (UPDATED인 경우)
-            if (changedFields != null && !changedFields.isEmpty()) {
-                endpointData.put("changedFields", changedFields);
-            }
             
             return objectMapper.writeValueAsString(endpointData);
         } catch (Exception e) {
@@ -197,14 +285,41 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
                 }
             }
             
-            // UPDATED 계산
+            // UPDATED 계산 및 상세 정보 수집
+            List<Map<String, Object>> updatedDetails = new ArrayList<>();
             for (String key : oldEndpointMap.keySet()) {
                 if (newEndpointMap.containsKey(key)) {
                     ApiEndpoint oldEndpoint = oldEndpointMap.get(key);
                     ApiEndpoint newEndpoint = newEndpointMap.get(key);
-                    if (!getChangedFields(oldEndpoint, newEndpoint).isEmpty()) {
+                    Map<String, Map<String, String>> fieldChanges = getDetailedFieldChanges(oldEndpoint, newEndpoint);
+                    if (!fieldChanges.isEmpty()) {
                         updatedCount++;
+                        
+                        // 변경 상세 정보
+                        Map<String, Object> detail = new LinkedHashMap<>();
+                        detail.put("path", newEndpoint.getPath());
+                        detail.put("method", newEndpoint.getHttpMethod());
+                        detail.put("changes", fieldChanges);
+                        updatedDetails.add(detail);
                     }
+                }
+            }
+            
+            // 추가된 엔드포인트 목록
+            List<String> addedPaths = new ArrayList<>();
+            for (String key : newEndpointMap.keySet()) {
+                if (!oldEndpointMap.containsKey(key)) {
+                    ApiEndpoint endpoint = newEndpointMap.get(key);
+                    addedPaths.add(endpoint.getHttpMethod().toUpperCase() + " " + endpoint.getPath());
+                }
+            }
+            
+            // 삭제된 엔드포인트 목록
+            List<String> removedPaths = new ArrayList<>();
+            for (String key : oldEndpointMap.keySet()) {
+                if (!newEndpointMap.containsKey(key)) {
+                    ApiEndpoint endpoint = oldEndpointMap.get(key);
+                    removedPaths.add(endpoint.getHttpMethod().toUpperCase() + " " + endpoint.getPath());
                 }
             }
             
@@ -217,6 +332,17 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
             summary.put("statistics", statistics);
             summary.put("totalOldEndpoints", oldEndpointMap.size());
             summary.put("totalNewEndpoints", newEndpointMap.size());
+            
+            // 상세 변경 정보
+            if (!addedPaths.isEmpty()) {
+                summary.put("addedEndpoints", addedPaths);
+            }
+            if (!removedPaths.isEmpty()) {
+                summary.put("removedEndpoints", removedPaths);
+            }
+            if (!updatedDetails.isEmpty()) {
+                summary.put("updatedEndpointsDetails", updatedDetails);
+            }
             
             return objectMapper.writeValueAsString(summary);
         } catch (Exception e) {

@@ -1,7 +1,13 @@
 package blackspring.janusspec.application.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "Swagger API 저장 요청")
 public record SaveSwaggerApiReq(
+        @Schema(description = "Swagger API 문서 URL", example = "http://localhost:18081/api/v1/users/api-docs", required = true)
         String url,
+        
+        @Schema(description = "서비스 이름 (선택, null이면 URL에서 자동 추출)", example = "users", required = false)
         String serviceName
 ) {
     // serviceName이 null이면 URL에서 추출

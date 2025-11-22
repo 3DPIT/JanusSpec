@@ -40,10 +40,10 @@ public class ApiDiffController {
     public ResponseEntity<Page<ApiDiffLogSummaryRes>> getAllDiffLogs(
             @Parameter(description = "페이지 번호 (0부터 시작)", example = "0")
             @RequestParam(defaultValue = "0") int page,
-            
+
             @Parameter(description = "페이지 크기", example = "10")
             @RequestParam(defaultValue = "10") int size) {
-        
+
         Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(getApiDiff.getAllDiffLogs(pageable));
     }

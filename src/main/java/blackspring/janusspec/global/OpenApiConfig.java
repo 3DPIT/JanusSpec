@@ -20,8 +20,8 @@ public class OpenApiConfig {
                         .description("Swagger API 버전 관리 및 변경 추적 시스템")
                         .version("v1.0.0")
                         .contact(new Contact()
-                                .name("Blackspring")
-                                .email("admin@example.com")))
+                                .name("km.park")
+                                .email("kyeongmin.park@mirero.co.kr")))
                 .servers(List.of(
                         new Server().url("http://localhost:8080").description("Local Server")
                 ));

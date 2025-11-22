@@ -10,7 +10,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: create-drop
+      ddl-auto: none
     show-sql: false
     defer-datasource-initialization: true
     properties:
@@ -19,3 +19,11 @@ spring:
         format_sql: true
         highlight_sql: true
         use_sql_comments: true
+
+springdoc:
+  api-docs:
+    path: /api/v1/janus/api-docs
+  swagger-ui:
+    path: /api/v1/janus/swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha

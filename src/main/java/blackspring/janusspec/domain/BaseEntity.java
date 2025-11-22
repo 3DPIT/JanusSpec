@@ -4,11 +4,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @MappedSuperclass
 public class BaseEntity {
     @Column(name = "create_at", nullable = false)
-    protected LocalDate createAt = LocalDate.now();
+    protected LocalDateTime createAt = LocalDateTime.now();
 }

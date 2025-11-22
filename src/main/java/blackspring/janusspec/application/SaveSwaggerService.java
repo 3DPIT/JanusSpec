@@ -30,7 +30,6 @@ public class SaveSwaggerService implements SaveApiSpec {
     private final JsonParserPort jsonParserPort;
     private final ApiDiffPort apiDiffPort;
 
-
     @Override
     public SaveSwaggerApiRes saveServiceApiSpec(SaveSwaggerApiReq req) {
         String serviceName = req.getServiceName();

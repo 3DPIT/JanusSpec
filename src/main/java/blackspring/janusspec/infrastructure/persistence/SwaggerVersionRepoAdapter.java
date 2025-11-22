@@ -21,8 +21,10 @@ public class SwaggerVersionRepoAdapter implements SwaggerVersionPort {
         SwaggerVersion checkHash = swaggerVersion.saveSwaggerVersion(req.serviceName(), req.swaggerUrl(), req.openApiSpec(), bySwaggerUrl.getHash());
 
         SwaggerVersion save = swaggerVersionRepository.save(checkHash.getHash()==null?bySwaggerUrl:checkHash);
+        
+        Long oldVersionId = (checkHash.getHash() != null && bySwaggerUrl.getId() != null) ? bySwaggerUrl.getId() : null;
     
-        return new SwaggerVersionRes(save.getId(),"성공적으로 저장완료",checkHash.getHash()==null?true:false);
+        return new SwaggerVersionRes(save.getId(), oldVersionId, "성공적으로 저장완료", checkHash.getHash()==null?true:false);
     }
 
     @Override
@@ -33,5 +35,10 @@ public class SwaggerVersionRepoAdapter implements SwaggerVersionPort {
     @Override
     public Optional<SwaggerVersion> findLatestByServiceName(String serviceName) {
         return swaggerVersionRepository.findTopByServiceNameOrderByIdDesc(serviceName);
+    }
+
+    @Override
+    public Optional<SwaggerVersion> findById(Long id) {
+        return swaggerVersionRepository.findById(id);
     }
 }

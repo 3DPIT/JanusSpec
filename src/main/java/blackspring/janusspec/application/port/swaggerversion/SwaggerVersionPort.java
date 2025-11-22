@@ -8,4 +8,5 @@ public interface SwaggerVersionPort {
     SwaggerVersionRes save(SwaggerVersionReq req);
     Optional<SwaggerVersion> findLatest();
     Optional<SwaggerVersion> findLatestByServiceName(String serviceName);
+    Optional<SwaggerVersion> findById(Long id);
 }

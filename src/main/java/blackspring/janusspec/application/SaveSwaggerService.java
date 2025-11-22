@@ -1,6 +1,7 @@
 package blackspring.janusspec.application;
 
 import blackspring.janusspec.application.dto.SaveSwaggerApiReq;
+import blackspring.janusspec.application.dto.SaveSwaggerApiRes;
 import blackspring.janusspec.application.port.apiendpoint.ApiEndPointPort;
 import blackspring.janusspec.application.port.apiendpoint.ApiEndPointReq;
 import blackspring.janusspec.application.port.jsonparser.JsonParserPort;
@@ -21,13 +22,13 @@ public class SaveSwaggerService implements SaveApiSpec {
 
 
     @Override
-    public String saveServiceApiSpec(SaveSwaggerApiReq req) {
+    public SaveSwaggerApiRes saveServiceApiSpec(SaveSwaggerApiReq req) {
         String[] urlSplit = req.url().split("/");
         OpenApiSpec openApiSpec = jsonParserPort.saveApiSpecAll(req.url());
         SwaggerVersionRes swaggerVersionRes = swaggerVersionPort.save(new SwaggerVersionReq(urlSplit[5], req.url(), openApiSpec));
         if (swaggerVersionRes.checkHash() == false)
             endPointPort.save(new ApiEndPointReq(urlSplit[5], swaggerVersionRes.swaggerVersionId(), openApiSpec));
 
-        return swaggerVersionRes.swaggerVersionId().toString();
+        return new SaveSwaggerApiRes(swaggerVersionRes.swaggerVersionId().toString(),req.url());
     }
 }

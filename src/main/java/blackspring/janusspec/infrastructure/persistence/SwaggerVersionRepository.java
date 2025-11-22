@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface SwaggerVersionRepository extends JpaRepository<SwaggerVersion,Long> {
     Optional<SwaggerVersion> findBySwaggerUrl(String url);
+    Optional<SwaggerVersion> findTopByOrderByIdDesc();
+    Optional<SwaggerVersion> findTopByServiceNameOrderByIdDesc(String serviceName);
 }

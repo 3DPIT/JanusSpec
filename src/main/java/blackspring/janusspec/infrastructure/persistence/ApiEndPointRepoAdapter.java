@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.Iterator;
+import java.util.List;
 
 @Repository
 @RequiredArgsConstructor
@@ -94,5 +95,10 @@ public class ApiEndPointRepoAdapter implements ApiEndPointPort {
         }
 
         return new ApiEndPointRes();
+    }
+
+    @Override
+    public List<ApiEndpoint> findBySwaggerVersion(SwaggerVersion swaggerVersion) {
+        return apiEndPointRepository.findBySwaggerVersion(swaggerVersion);
     }
 }

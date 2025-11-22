@@ -1,5 +1,8 @@
 package blackspring.janusspec.application;
 
+import blackspring.janusspec.application.dto.ApiEndpointDto;
+import blackspring.janusspec.application.dto.GetLatestSwaggerApiRes;
+import blackspring.janusspec.application.dto.GetServiceApiPathsRes;
 import blackspring.janusspec.application.dto.SaveSwaggerApiReq;
 import blackspring.janusspec.application.dto.SaveSwaggerApiRes;
 import blackspring.janusspec.application.port.apiendpoint.ApiEndPointPort;
@@ -8,9 +11,14 @@ import blackspring.janusspec.application.port.jsonparser.JsonParserPort;
 import blackspring.janusspec.application.port.swaggerversion.SwaggerVersionPort;
 import blackspring.janusspec.application.port.swaggerversion.SwaggerVersionReq;
 import blackspring.janusspec.application.port.swaggerversion.SwaggerVersionRes;
+import blackspring.janusspec.domain.SwaggerVersion;
 import blackspring.janusspec.infrastructure.adapter.json.OpenApiSpec;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,5 +38,43 @@ public class SaveSwaggerService implements SaveApiSpec {
             endPointPort.save(new ApiEndPointReq(urlSplit[5], swaggerVersionRes.swaggerVersionId(), openApiSpec));
 
         return new SaveSwaggerApiRes(swaggerVersionRes.swaggerVersionId().toString(),req.url());
+    }
+
+    @Override
+    public Optional<GetLatestSwaggerApiRes> getLatestSwaggerApi() {
+        return swaggerVersionPort.findLatest()
+                .map(swaggerVersion -> new GetLatestSwaggerApiRes(
+                        swaggerVersion.getId(),
+                        swaggerVersion.getServiceName(),
+                        swaggerVersion.getSwaggerUrl(),
+                        swaggerVersion.getVersionTag(),
+                        swaggerVersion.getHash()
+                ));
+    }
+
+    @Override
+    public Optional<GetServiceApiPathsRes> getServiceApiPaths(String serviceName) {
+        return swaggerVersionPort.findLatestByServiceName(serviceName)
+                .map(swaggerVersion -> {
+                    List<ApiEndpointDto> endpoints = endPointPort.findBySwaggerVersion(swaggerVersion)
+                            .stream()
+                            .map(endpoint -> new ApiEndpointDto(
+                                    endpoint.getPath(),
+                                    endpoint.getHttpMethod(),
+                                    endpoint.getSummary(),
+                                    endpoint.getOperationId(),
+                                    endpoint.isDeprecated(),
+                                    endpoint.getRequestSchemaName(),
+                                    endpoint.getResponseSchemaName()
+                            ))
+                            .collect(Collectors.toList());
+
+                    return new GetServiceApiPathsRes(
+                            swaggerVersion.getServiceName(),
+                            swaggerVersion.getVersionTag(),
+                            swaggerVersion.getId(),
+                            endpoints
+                    );
+                });
     }
 }

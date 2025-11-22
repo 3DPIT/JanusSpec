@@ -1,36 +1,38 @@
 package blackspring.janusspec.domain;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Setter
-@Table(name = "api_schema")
+@Table(name = "api_diff_schema")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
-public class ApiSchema extends BaseEntity {
+public class ApiDiffSchema {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "swagger_version_id")
-    private SwaggerVersion swaggerVersion;
+    @JoinColumn(name = "diff_log_id")
+    private ApiDiffLog diffLog;
 
-    @Column(length = 200, nullable = false)
-    private String name;
+    @Column(length = 200)
+    private String schemaName;
+
+    @Column(name = "change_type", length = 50)
+    private String changeType;   // ADDED, REMOVED, UPDATED
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private String rawSchema;
+    private String beforeJson;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private String properties;
+    private String afterJson;
 }
+

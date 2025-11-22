@@ -3,8 +3,11 @@ package blackspring.janusspec.infrastructure.persistence;
 import blackspring.janusspec.application.port.apidiff.ApiDiffPort;
 import blackspring.janusspec.domain.ApiDiffEndpoint;
 import blackspring.janusspec.domain.ApiDiffLog;
+import blackspring.janusspec.domain.ApiDiffSchema;
 import blackspring.janusspec.domain.ApiEndpoint;
+import blackspring.janusspec.domain.ApiSchema;
 import blackspring.janusspec.domain.SwaggerVersion;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -18,7 +21,9 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
 
     private final ApiDiffLogRepository apiDiffLogRepository;
     private final ApiDiffEndpointRepository apiDiffEndpointRepository;
+    private final ApiDiffSchemaRepository apiDiffSchemaRepository;
     private final ApiEndPointRepository apiEndPointRepository;
+    private final ApiSchemaRepository apiSchemaRepository;
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -26,6 +31,10 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
         // 이전 버전과 새 버전의 엔드포인트 가져오기
         List<ApiEndpoint> oldEndpoints = apiEndPointRepository.findBySwaggerVersion(oldVersion);
         List<ApiEndpoint> newEndpoints = apiEndPointRepository.findBySwaggerVersion(newVersion);
+
+        // 이전 버전과 새 버전의 스키마 가져오기
+        List<ApiSchema> oldSchemas = apiSchemaRepository.findBySwaggerVersion(oldVersion);
+        List<ApiSchema> newSchemas = apiSchemaRepository.findBySwaggerVersion(newVersion);
 
         // 엔드포인트 비교
         Map<String, ApiEndpoint> oldEndpointMap = oldEndpoints.stream()
@@ -40,6 +49,19 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
                         e -> e
                 ));
 
+        // 스키마 비교
+        Map<String, ApiSchema> oldSchemaMap = oldSchemas.stream()
+                .collect(Collectors.toMap(
+                        ApiSchema::getName,
+                        s -> s
+                ));
+
+        Map<String, ApiSchema> newSchemaMap = newSchemas.stream()
+                .collect(Collectors.toMap(
+                        ApiSchema::getName,
+                        s -> s
+                ));
+
         // 통계 정보 수집
         int addedCount = 0;
         int removedCount = 0;
@@ -49,7 +71,7 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
         ApiDiffLog diffLog = ApiDiffLog.builder()
                 .oldVersion(oldVersion)
                 .newVersion(newVersion)
-                .diffJson(createDiffSummary(oldVersion, newVersion, oldEndpointMap, newEndpointMap))
+                .diffJson(createDiffSummary(oldVersion, newVersion, oldEndpointMap, newEndpointMap, oldSchemaMap, newSchemaMap))
                 .build();
 
         ApiDiffLog savedDiffLog = apiDiffLogRepository.save(diffLog);
@@ -110,6 +132,70 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
             }
         }
 
+        // Schema 변경 감지 및 저장
+        int schemaAddedCount = 0;
+        int schemaRemovedCount = 0;
+        int schemaUpdatedCount = 0;
+
+        // ADDED: 새 버전에만 있는 스키마
+        for (Map.Entry<String, ApiSchema> entry : newSchemaMap.entrySet()) {
+            if (!oldSchemaMap.containsKey(entry.getKey())) {
+                ApiSchema newSchema = entry.getValue();
+                ApiDiffSchema diffSchema = ApiDiffSchema.builder()
+                        .diffLog(savedDiffLog)
+                        .schemaName(newSchema.getName())
+                        .changeType("ADDED")
+                        .beforeJson(null)
+                        .afterJson(newSchema.getRawSchema())
+                        .build();
+                apiDiffSchemaRepository.save(diffSchema);
+                schemaAddedCount++;
+                System.out.println("[SCHEMA ADDED] " + entry.getKey());
+            }
+        }
+
+        // REMOVED: 이전 버전에만 있는 스키마
+        for (Map.Entry<String, ApiSchema> entry : oldSchemaMap.entrySet()) {
+            if (!newSchemaMap.containsKey(entry.getKey())) {
+                ApiSchema oldSchema = entry.getValue();
+                ApiDiffSchema diffSchema = ApiDiffSchema.builder()
+                        .diffLog(savedDiffLog)
+                        .schemaName(oldSchema.getName())
+                        .changeType("REMOVED")
+                        .beforeJson(oldSchema.getRawSchema())
+                        .afterJson(null)
+                        .build();
+                apiDiffSchemaRepository.save(diffSchema);
+                schemaRemovedCount++;
+                System.out.println("[SCHEMA REMOVED] " + entry.getKey());
+            }
+        }
+
+        // UPDATED: 양쪽 모두에 있지만 내용이 다른 스키마
+        for (Map.Entry<String, ApiSchema> entry : oldSchemaMap.entrySet()) {
+            if (newSchemaMap.containsKey(entry.getKey())) {
+                ApiSchema oldSchema = entry.getValue();
+                ApiSchema newSchema = newSchemaMap.get(entry.getKey());
+                
+                // rawSchema 비교
+                if (!Objects.equals(oldSchema.getRawSchema(), newSchema.getRawSchema())) {
+                    // Schema 변경 상세 정보 추출
+                    Map<String, Map<String, String>> schemaFieldChanges = getDetailedSchemaChanges(oldSchema, newSchema);
+                    
+                    ApiDiffSchema diffSchema = ApiDiffSchema.builder()
+                            .diffLog(savedDiffLog)
+                            .schemaName(newSchema.getName())
+                            .changeType("UPDATED")
+                            .beforeJson(createDetailedSchemaBeforeJson(oldSchema, schemaFieldChanges))
+                            .afterJson(createDetailedSchemaAfterJson(newSchema, schemaFieldChanges))
+                            .build();
+                    apiDiffSchemaRepository.save(diffSchema);
+                    schemaUpdatedCount++;
+                    System.out.println("[SCHEMA UPDATED] " + entry.getKey());
+                }
+            }
+        }
+
         // 상세 로그 출력
         System.out.println("\n========================================");
         System.out.println("📊 API 변경 감지 완료!");
@@ -117,7 +203,10 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
         System.out.println("🆕 추가된 API: " + addedCount + "개");
         System.out.println("🗑️  삭제된 API: " + removedCount + "개");
         System.out.println("✏️  수정된 API: " + updatedCount + "개");
-        System.out.println("📈 총 변경 사항: " + (addedCount + removedCount + updatedCount) + "개");
+        System.out.println("📦 추가된 Schema: " + schemaAddedCount + "개");
+        System.out.println("🗑️  삭제된 Schema: " + schemaRemovedCount + "개");
+        System.out.println("✏️  수정된 Schema: " + schemaUpdatedCount + "개");
+        System.out.println("📈 총 변경 사항: " + (addedCount + removedCount + updatedCount + schemaAddedCount + schemaRemovedCount + schemaUpdatedCount) + "개");
         System.out.println("========================================\n");
 
         return savedDiffLog;
@@ -254,10 +343,146 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
     }
 
     /**
+     * 두 스키마를 비교하여 변경된 필드의 상세 정보 반환
+     */
+    private Map<String, Map<String, String>> getDetailedSchemaChanges(ApiSchema oldSchema, ApiSchema newSchema) {
+        Map<String, Map<String, String>> changes = new LinkedHashMap<>();
+        
+        try {
+            JsonNode oldJson = objectMapper.readTree(oldSchema.getRawSchema());
+            JsonNode newJson = objectMapper.readTree(newSchema.getRawSchema());
+            
+            // type 변경 감지
+            if (oldJson.has("type") && newJson.has("type")) {
+                if (!Objects.equals(oldJson.get("type").asText(), newJson.get("type").asText())) {
+                    Map<String, String> change = new LinkedHashMap<>();
+                    change.put("before", oldJson.get("type").asText());
+                    change.put("after", newJson.get("type").asText());
+                    changes.put("type", change);
+                }
+            }
+            
+            // properties 변경 감지
+            if (oldJson.has("properties") || newJson.has("properties")) {
+                JsonNode oldProperties = oldJson.has("properties") ? oldJson.get("properties") : null;
+                JsonNode newProperties = newJson.has("properties") ? newJson.get("properties") : null;
+                
+                Set<String> allPropertyNames = new TreeSet<>();
+                if (oldProperties != null && oldProperties.isObject()) {
+                    oldProperties.fieldNames().forEachRemaining(allPropertyNames::add);
+                }
+                if (newProperties != null && newProperties.isObject()) {
+                    newProperties.fieldNames().forEachRemaining(allPropertyNames::add);
+                }
+                
+                for (String propName : allPropertyNames) {
+                    JsonNode oldProp = (oldProperties != null && oldProperties.has(propName)) ? oldProperties.get(propName) : null;
+                    JsonNode newProp = (newProperties != null && newProperties.has(propName)) ? newProperties.get(propName) : null;
+                    
+                    if (oldProp == null && newProp != null) {
+                        // 새로 추가된 property
+                        Map<String, String> change = new LinkedHashMap<>();
+                        change.put("before", null);
+                        change.put("after", newProp.toString());
+                        changes.put("property." + propName, change);
+                    } else if (oldProp != null && newProp == null) {
+                        // 삭제된 property
+                        Map<String, String> change = new LinkedHashMap<>();
+                        change.put("before", oldProp.toString());
+                        change.put("after", null);
+                        changes.put("property." + propName, change);
+                    } else if (oldProp != null && newProp != null && !oldProp.equals(newProp)) {
+                        // 수정된 property
+                        Map<String, String> change = new LinkedHashMap<>();
+                        change.put("before", oldProp.toString());
+                        change.put("after", newProp.toString());
+                        changes.put("property." + propName, change);
+                    }
+                }
+            }
+            
+            // required 필드 변경 감지
+            if (oldJson.has("required") || newJson.has("required")) {
+                JsonNode oldRequired = oldJson.has("required") ? oldJson.get("required") : null;
+                JsonNode newRequired = newJson.has("required") ? newJson.get("required") : null;
+                
+                if (!Objects.equals(oldRequired, newRequired)) {
+                    Map<String, String> change = new LinkedHashMap<>();
+                    change.put("before", oldRequired != null ? oldRequired.toString() : "[]");
+                    change.put("after", newRequired != null ? newRequired.toString() : "[]");
+                    changes.put("required", change);
+                }
+            }
+            
+        } catch (Exception e) {
+            // JSON 파싱 실패 시 전체 스키마 비교
+            if (!Objects.equals(oldSchema.getRawSchema(), newSchema.getRawSchema())) {
+                Map<String, String> change = new LinkedHashMap<>();
+                change.put("before", oldSchema.getRawSchema());
+                change.put("after", newSchema.getRawSchema());
+                changes.put("rawSchema", change);
+            }
+        }
+        
+        return changes;
+    }
+    
+    /**
+     * 변경 전 Schema 상세 JSON 생성
+     */
+    private String createDetailedSchemaBeforeJson(ApiSchema schema, Map<String, Map<String, String>> fieldChanges) {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("name", schema.getName());
+            data.put("rawSchema", schema.getRawSchema());
+            
+            // 변경된 필드 상세 정보
+            if (!fieldChanges.isEmpty()) {
+                Map<String, String> changedFieldsDetail = new LinkedHashMap<>();
+                for (Map.Entry<String, Map<String, String>> entry : fieldChanges.entrySet()) {
+                    String beforeValue = entry.getValue().get("before");
+                    changedFieldsDetail.put(entry.getKey(), beforeValue != null ? beforeValue : "");
+                }
+                data.put("changedFields", changedFieldsDetail);
+            }
+            
+            return objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            return schema.getRawSchema();
+        }
+    }
+    
+    /**
+     * 변경 후 Schema 상세 JSON 생성
+     */
+    private String createDetailedSchemaAfterJson(ApiSchema schema, Map<String, Map<String, String>> fieldChanges) {
+        try {
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("name", schema.getName());
+            data.put("rawSchema", schema.getRawSchema());
+            
+            // 변경된 필드 상세 정보
+            if (!fieldChanges.isEmpty()) {
+                Map<String, String> changedFieldsDetail = new LinkedHashMap<>();
+                for (Map.Entry<String, Map<String, String>> entry : fieldChanges.entrySet()) {
+                    String afterValue = entry.getValue().get("after");
+                    changedFieldsDetail.put(entry.getKey(), afterValue != null ? afterValue : "");
+                }
+                data.put("changedFields", changedFieldsDetail);
+            }
+            
+            return objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            return schema.getRawSchema();
+        }
+    }
+
+    /**
      * Diff 요약 정보 생성 (통계 포함)
      */
     private String createDiffSummary(SwaggerVersion oldVersion, SwaggerVersion newVersion, 
-                                     Map<String, ApiEndpoint> oldEndpointMap, Map<String, ApiEndpoint> newEndpointMap) {
+                                     Map<String, ApiEndpoint> oldEndpointMap, Map<String, ApiEndpoint> newEndpointMap,
+                                     Map<String, ApiSchema> oldSchemaMap, Map<String, ApiSchema> newSchemaMap) {
         try {
             Map<String, Object> summary = new LinkedHashMap<>();
             summary.put("oldVersionId", oldVersion.getId());
@@ -323,15 +548,60 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
                 }
             }
             
+            // Schema 통계 계산
+            int schemaAddedCount = 0;
+            int schemaRemovedCount = 0;
+            int schemaUpdatedCount = 0;
+            List<String> addedSchemas = new ArrayList<>();
+            List<String> removedSchemas = new ArrayList<>();
+            List<String> updatedSchemas = new ArrayList<>();
+            
+            // ADDED Schema 계산
+            for (String key : newSchemaMap.keySet()) {
+                if (!oldSchemaMap.containsKey(key)) {
+                    schemaAddedCount++;
+                    addedSchemas.add(key);
+                }
+            }
+            
+            // REMOVED Schema 계산
+            for (String key : oldSchemaMap.keySet()) {
+                if (!newSchemaMap.containsKey(key)) {
+                    schemaRemovedCount++;
+                    removedSchemas.add(key);
+                }
+            }
+            
+            // UPDATED Schema 계산
+            for (String key : oldSchemaMap.keySet()) {
+                if (newSchemaMap.containsKey(key)) {
+                    ApiSchema oldSchema = oldSchemaMap.get(key);
+                    ApiSchema newSchema = newSchemaMap.get(key);
+                    if (!Objects.equals(oldSchema.getRawSchema(), newSchema.getRawSchema())) {
+                        schemaUpdatedCount++;
+                        updatedSchemas.add(key);
+                    }
+                }
+            }
+            
             Map<String, Integer> statistics = new LinkedHashMap<>();
             statistics.put("added", addedCount);
             statistics.put("removed", removedCount);
             statistics.put("updated", updatedCount);
             statistics.put("total", addedCount + removedCount + updatedCount);
             
+            Map<String, Integer> schemaStatistics = new LinkedHashMap<>();
+            schemaStatistics.put("added", schemaAddedCount);
+            schemaStatistics.put("removed", schemaRemovedCount);
+            schemaStatistics.put("updated", schemaUpdatedCount);
+            schemaStatistics.put("total", schemaAddedCount + schemaRemovedCount + schemaUpdatedCount);
+            
             summary.put("statistics", statistics);
+            summary.put("schemaStatistics", schemaStatistics);
             summary.put("totalOldEndpoints", oldEndpointMap.size());
             summary.put("totalNewEndpoints", newEndpointMap.size());
+            summary.put("totalOldSchemas", oldSchemaMap.size());
+            summary.put("totalNewSchemas", newSchemaMap.size());
             
             // 상세 변경 정보
             if (!addedPaths.isEmpty()) {
@@ -342,6 +612,17 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
             }
             if (!updatedDetails.isEmpty()) {
                 summary.put("updatedEndpointsDetails", updatedDetails);
+            }
+            
+            // Schema 변경 정보
+            if (!addedSchemas.isEmpty()) {
+                summary.put("addedSchemas", addedSchemas);
+            }
+            if (!removedSchemas.isEmpty()) {
+                summary.put("removedSchemas", removedSchemas);
+            }
+            if (!updatedSchemas.isEmpty()) {
+                summary.put("updatedSchemas", updatedSchemas);
             }
             
             return objectMapper.writeValueAsString(summary);

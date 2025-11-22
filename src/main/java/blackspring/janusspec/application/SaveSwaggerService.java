@@ -8,6 +8,7 @@ import blackspring.janusspec.application.dto.SaveSwaggerApiRes;
 import blackspring.janusspec.application.port.apidiff.ApiDiffPort;
 import blackspring.janusspec.application.port.apiendpoint.ApiEndPointPort;
 import blackspring.janusspec.application.port.apiendpoint.ApiEndPointReq;
+import blackspring.janusspec.application.port.apischema.ApiSchemaPort;
 import blackspring.janusspec.application.port.jsonparser.JsonParserPort;
 import blackspring.janusspec.application.port.swaggerversion.SwaggerVersionPort;
 import blackspring.janusspec.application.port.swaggerversion.SwaggerVersionReq;
@@ -27,6 +28,7 @@ public class SaveSwaggerService implements SaveApiSpec {
 
     private final SwaggerVersionPort swaggerVersionPort;
     private final ApiEndPointPort endPointPort;
+    private final ApiSchemaPort apiSchemaPort;
     private final JsonParserPort jsonParserPort;
     private final ApiDiffPort apiDiffPort;
 
@@ -38,16 +40,24 @@ public class SaveSwaggerService implements SaveApiSpec {
         
         // 해시가 변경된 경우 (API가 변경된 경우)
         if (swaggerVersionRes.checkHash() == false) {
-            // 새 버전의 엔드포인트 저장
-            endPointPort.save(new ApiEndPointReq(serviceName, swaggerVersionRes.swaggerVersionId(), openApiSpec));
+            Optional<SwaggerVersion> newVersionOpt = swaggerVersionPort.findById(swaggerVersionRes.swaggerVersionId());
             
-            // 이전 버전이 존재하면 diff 저장
-            if (swaggerVersionRes.oldVersionId() != null) {
-                Optional<SwaggerVersion> oldVersionOpt = swaggerVersionPort.findById(swaggerVersionRes.oldVersionId());
-                Optional<SwaggerVersion> newVersionOpt = swaggerVersionPort.findById(swaggerVersionRes.swaggerVersionId());
+            if (newVersionOpt.isPresent()) {
+                SwaggerVersion newVersion = newVersionOpt.get();
                 
-                if (oldVersionOpt.isPresent() && newVersionOpt.isPresent()) {
-                    apiDiffPort.saveDiff(oldVersionOpt.get(), newVersionOpt.get());
+                // 새 버전의 엔드포인트 저장
+                endPointPort.save(new ApiEndPointReq(serviceName, swaggerVersionRes.swaggerVersionId(), openApiSpec));
+                
+                // 새 버전의 스키마 저장
+                apiSchemaPort.save(newVersion, openApiSpec);
+                
+                // 이전 버전이 존재하면 diff 저장
+                if (swaggerVersionRes.oldVersionId() != null) {
+                    Optional<SwaggerVersion> oldVersionOpt = swaggerVersionPort.findById(swaggerVersionRes.oldVersionId());
+                    
+                    if (oldVersionOpt.isPresent()) {
+                        apiDiffPort.saveDiff(oldVersionOpt.get(), newVersion);
+                    }
                 }
             }
         }

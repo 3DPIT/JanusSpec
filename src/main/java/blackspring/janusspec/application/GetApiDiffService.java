@@ -3,10 +3,13 @@ package blackspring.janusspec.application;
 import blackspring.janusspec.application.dto.ApiDiffDetailRes;
 import blackspring.janusspec.application.dto.ApiDiffLogSummaryRes;
 import blackspring.janusspec.application.dto.ApiEndpointChangeDto;
+import blackspring.janusspec.application.dto.ApiSchemaChangeDto;
 import blackspring.janusspec.domain.ApiDiffEndpoint;
 import blackspring.janusspec.domain.ApiDiffLog;
+import blackspring.janusspec.domain.ApiDiffSchema;
 import blackspring.janusspec.infrastructure.persistence.ApiDiffEndpointRepository;
 import blackspring.janusspec.infrastructure.persistence.ApiDiffLogRepository;
+import blackspring.janusspec.infrastructure.persistence.ApiDiffSchemaRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -24,6 +27,7 @@ public class GetApiDiffService implements GetApiDiff {
 
     private final ApiDiffLogRepository apiDiffLogRepository;
     private final ApiDiffEndpointRepository apiDiffEndpointRepository;
+    private final ApiDiffSchemaRepository apiDiffSchemaRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -63,11 +67,33 @@ public class GetApiDiffService implements GetApiDiff {
                             .map(this::convertToChangeDto)
                             .collect(Collectors.toList());
                     
+                    // 모든 변경 스키마 조회
+                    List<ApiDiffSchema> allSchemas = apiDiffSchemaRepository.findByDiffLog(diffLog);
+                    
+                    // 타입별로 분류
+                    List<ApiSchemaChangeDto> addedSchemas = allSchemas.stream()
+                            .filter(s -> "ADDED".equals(s.getChangeType()))
+                            .map(this::convertToSchemaChangeDto)
+                            .collect(Collectors.toList());
+                    
+                    List<ApiSchemaChangeDto> removedSchemas = allSchemas.stream()
+                            .filter(s -> "REMOVED".equals(s.getChangeType()))
+                            .map(this::convertToSchemaChangeDto)
+                            .collect(Collectors.toList());
+                    
+                    List<ApiSchemaChangeDto> updatedSchemas = allSchemas.stream()
+                            .filter(s -> "UPDATED".equals(s.getChangeType()))
+                            .map(this::convertToSchemaChangeDto)
+                            .collect(Collectors.toList());
+                    
                     return new ApiDiffDetailRes(
                             summary,
                             added,
                             removed,
                             updated,
+                            addedSchemas,
+                            removedSchemas,
+                            updatedSchemas,
                             diffLog.getDiffJson()
                     );
                 });
@@ -99,6 +125,15 @@ public class GetApiDiffService implements GetApiDiff {
                 endpoint.getChangeType(),
                 endpoint.getBeforeJson(),
                 endpoint.getAfterJson()
+        );
+    }
+
+    private ApiSchemaChangeDto convertToSchemaChangeDto(ApiDiffSchema schema) {
+        return new ApiSchemaChangeDto(
+                schema.getSchemaName(),
+                schema.getChangeType(),
+                schema.getBeforeJson(),
+                schema.getAfterJson()
         );
     }
 

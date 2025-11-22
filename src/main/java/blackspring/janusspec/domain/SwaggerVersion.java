@@ -45,8 +45,16 @@ public class SwaggerVersion {
         // JSON 키 순서를 보장하기 위해 정렬된 형태로 직렬화
         String normalizedPathsJson = normalizeJsonNode(spec.getPaths());
         
+        // schemas도 hash에 포함
+        String normalizedSchemasJson = "";
+        if (spec.getComponents() != null && spec.getComponents().getSchemas() != null) {
+            normalizedSchemasJson = normalizeJsonNode(spec.getComponents().getSchemas());
+        }
+        
+        // paths + schemas를 합쳐서 hash 생성
+        String combinedJson = normalizedPathsJson + normalizedSchemasJson;
         String hash = Hashing.sha256()
-                .hashString(normalizedPathsJson, StandardCharsets.UTF_8)
+                .hashString(combinedJson, StandardCharsets.UTF_8)
                 .toString();
 
         if(hash.equals(checkHash)){

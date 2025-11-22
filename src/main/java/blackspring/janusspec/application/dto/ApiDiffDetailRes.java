@@ -19,6 +19,15 @@ public record ApiDiffDetailRes(
         @Schema(description = "수정된 엔드포인트 목록")
         List<ApiEndpointChangeDto> updatedEndpoints,
         
+        @Schema(description = "추가된 스키마 목록")
+        List<ApiSchemaChangeDto> addedSchemas,
+        
+        @Schema(description = "삭제된 스키마 목록")
+        List<ApiSchemaChangeDto> removedSchemas,
+        
+        @Schema(description = "수정된 스키마 목록")
+        List<ApiSchemaChangeDto> updatedSchemas,
+        
         @Schema(description = "전체 Diff JSON 요약")
         String diffJsonSummary
 ) {

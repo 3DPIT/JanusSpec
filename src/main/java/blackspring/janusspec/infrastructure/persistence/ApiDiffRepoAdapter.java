@@ -9,6 +9,7 @@ import blackspring.janusspec.domain.ApiSchema;
 import blackspring.janusspec.domain.SwaggerVersion;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -177,8 +178,11 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
                 ApiSchema oldSchema = entry.getValue();
                 ApiSchema newSchema = newSchemaMap.get(entry.getKey());
                 
-                // rawSchema 비교
-                if (!Objects.equals(oldSchema.getRawSchema(), newSchema.getRawSchema())) {
+                // 정규화된 rawSchema로 비교 (순서 무관하게 비교)
+                String normalizedOldSchema = normalizeSchemaJson(oldSchema.getRawSchema());
+                String normalizedNewSchema = normalizeSchemaJson(newSchema.getRawSchema());
+                
+                if (!Objects.equals(normalizedOldSchema, normalizedNewSchema)) {
                     // Schema 변경 상세 정보 추출
                     Map<String, Map<String, String>> schemaFieldChanges = getDetailedSchemaChanges(oldSchema, newSchema);
                     
@@ -349,8 +353,12 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
         Map<String, Map<String, String>> changes = new LinkedHashMap<>();
         
         try {
-            JsonNode oldJson = objectMapper.readTree(oldSchema.getRawSchema());
-            JsonNode newJson = objectMapper.readTree(newSchema.getRawSchema());
+            // 정규화된 JSON으로 파싱하여 비교
+            String normalizedOld = normalizeSchemaJson(oldSchema.getRawSchema());
+            String normalizedNew = normalizeSchemaJson(newSchema.getRawSchema());
+            
+            JsonNode oldJson = objectMapper.readTree(normalizedOld);
+            JsonNode newJson = objectMapper.readTree(normalizedNew);
             
             // type 변경 감지
             if (oldJson.has("type") && newJson.has("type")) {
@@ -628,6 +636,61 @@ public class ApiDiffRepoAdapter implements ApiDiffPort {
             return objectMapper.writeValueAsString(summary);
         } catch (Exception e) {
             return "{}";
+        }
+    }
+    
+    /**
+     * Schema JSON을 정규화하여 키 순서를 보장합니다.
+     * 같은 내용이라도 항상 같은 문자열이 되도록 보장합니다.
+     */
+    private String normalizeSchemaJson(String jsonString) {
+        if (jsonString == null || jsonString.isEmpty()) {
+            return jsonString;
+        }
+        
+        try {
+            JsonNode node = objectMapper.readTree(jsonString);
+            JsonNode normalized = normalizeJsonNodeRecursive(node, objectMapper);
+            return objectMapper.writeValueAsString(normalized);
+        } catch (Exception e) {
+            // 파싱 실패 시 원본 반환
+            return jsonString;
+        }
+    }
+    
+    /**
+     * JSON 노드를 재귀적으로 정규화합니다.
+     */
+    private JsonNode normalizeJsonNodeRecursive(JsonNode node, ObjectMapper mapper) {
+        if (node == null || node.isNull()) {
+            return node;
+        }
+        
+        if (node.isObject()) {
+            ObjectNode objectNode = (ObjectNode) node;
+            TreeMap<String, JsonNode> sortedMap = new TreeMap<>();
+            
+            // 모든 필드를 키 순서대로 정렬
+            objectNode.fields().forEachRemaining(entry -> {
+                // 중첩된 객체도 재귀적으로 정규화
+                JsonNode normalizedValue = normalizeJsonNodeRecursive(entry.getValue(), mapper);
+                sortedMap.put(entry.getKey(), normalizedValue);
+            });
+            
+            // 정렬된 Map을 다시 JsonNode로 변환
+            ObjectNode sortedNode = mapper.createObjectNode();
+            sortedMap.forEach(sortedNode::set);
+            return sortedNode;
+        } else if (node.isArray()) {
+            // 배열의 경우 각 요소를 정규화
+            com.fasterxml.jackson.databind.node.ArrayNode arrayNode = mapper.createArrayNode();
+            node.forEach(element -> {
+                arrayNode.add(normalizeJsonNodeRecursive(element, mapper));
+            });
+            return arrayNode;
+        } else {
+            // 원시 값은 그대로 반환
+            return node;
         }
     }
 }

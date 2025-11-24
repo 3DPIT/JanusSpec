@@ -22,7 +22,7 @@ jobs:
         run: ./gradlew clean build -x test
 
       - name: Build Docker Image
-        run: docker build -t janus:0.1 .
+        run: docker build --platform=linux/amd64 -t janus:0.1 .
 
       - name: Save Docker image to tar
         run: docker save janus:0.1 -o janus.tar

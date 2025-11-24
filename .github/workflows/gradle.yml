@@ -28,6 +28,16 @@ jobs:
       - name: Save Docker image to tar
         run: |
           docker save janus:0.1 -o janus.tar
+          
+      - name: Fix permission on server
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            chmod 777 /home/${{ secrets.SSH_USER }}/janusSpec/janus.tar
 
       - name: Send image via SCP
         uses: appleboy/scp-action@v0.1.7

@@ -1,0 +1,40 @@
+name: Build & Send Docker Image
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build with Gradle
+        run: ./gradlew clean build -x test
+
+      - name: Build Docker Image
+        run: |
+          docker build -t janus:0.1 .
+
+      - name: Save Docker image to tar
+        run: |
+          docker save janus:0.1 -o janus.tar
+
+      - name: Send image via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "janus.tar"
+          target: "/home/${{ secrets.SSH_USER }}/janusSpec/"

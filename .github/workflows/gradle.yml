@@ -41,14 +41,6 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           source: "janus.tar"
           target: "/home/${{ secrets.SSH_USER }}/janusSpec/"
-
-      # 🔥⛔ 여기 추가하면 됨!!
-      - name: Fix permission on server
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            chmod 777 /home/${{ secrets.SSH_USER }}/janusSpec/janus.tar
+          tar_dereference: false
+          rm: false
+          strip_components: 0

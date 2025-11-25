@@ -1,0 +1,12 @@
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: janusdb
+      POSTGRES_USER: black
+      POSTGRES_PASSWORD: black
+      TZ: Asia/Seoul
+    volumes:
+      - ./pgdata1:/var/lib/postgresql
+    ports:
+      - "5432:5432"
